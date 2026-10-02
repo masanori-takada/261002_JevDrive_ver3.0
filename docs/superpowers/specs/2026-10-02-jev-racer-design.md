@@ -17,7 +17,7 @@ Ollama の投稿（2026-09-30）が紹介していた「意思決定モデル Ni
 含む:
 - Canvas のレースゲーム（左・右・加速・減速）
 - 画面フレームからの物体検出と、コース端の検出
-- 検出結果を Jev に渡し、操作を決めさせる Route Handler
+- 検出結果を Jev に渡し、目標レーンと加減速（Plan）を決めさせる Route Handler
 - 手動操作（キーボード）と Jev 操作の切り替え、停止ボタン
 - 単体テストと、実 Jev での完走確認
 
@@ -33,16 +33,16 @@ Next.js（App Router、TypeScript）。Vercel へそのままデプロイでき�
 ```
 [racer] --frame--> [vision] --Observation--> [driver] --POST--> /api/systemone --> AI Gateway --> Jev
    ^                                            |                                      |
-   +------------------ Action <-----------------+<------------- Action --------------+
+   +------------------ Action <-----------------+<-------------- Plan ---------------+
 ```
 
 | ユニット | 責務 | 依存 |
 |---|---|---|
-| `racer` | ゲーム状態の更新と Canvas 描画。`applyAction(action)` を受け付ける | なし |
+| `racer` | ゲーム状態の更新と Canvas 描画。`step(state, action)` で操作を受け付ける。Jev 運転中は、毎フレーム `laneSteer(playerX, targetX)` が目標レーンへ操舵する | なし |
 | `vision` | `detect(imageData) -> Detections`。YOLO11n（onnxruntime-web）で物体検出し、画素走査でコース端を取る | onnxruntime-web |
 | `observation` | Detections を Jev 向けの `Observation` JSON に変換する純関数 | なし |
-| `driver` | 約150ms周期で observation を送り、Action を racer に適用する。タイムアウトと失敗時の保持を担う | racer, vision |
-| `/api/systemone` | Observation を受け、Jev に問い合わせ、Action を返す。API キーはここだけが持つ | AI Gateway |
+| `driver` | 約150ms周期（処理中は重ねない）で observation を送り、Jev の Plan（目標レーン・throttle）を受け取って保持する。タイムアウトと失敗時の保持を担う | racer, vision |
+| `/api/systemone` | Observation を受け、5レーンの余裕を計算して Jev に問い合わせ、Plan を返す。API キーはここだけが持つ | AI Gateway |
 
 `vision` は `detect()` というインターフェースの裏に隠し、検出器を差し替え可能にする。色ブロブ検出は作らない（テストの正解はゲーム内部の座標から計算でき、予備は「直前の操作を維持」で足りるため）。
 
@@ -56,8 +56,16 @@ type Observation = {
   obstacles: { cls: 'car' | 'truck' | 'bus' | 'motorcycle'; conf: number;
                x: number; y: number; w: number; h: number }[]; // 画面比 0..1
 };
-type Action = { steer: -1 | 0 | 1; throttle: -1 | 0 | 1 };
-type SystemOneResponse = { action: Action | null; latencyMs: number; source: 'jev' | 'hold' }; // Jev が失敗したら action は null
+type Action = { steer: -1 | 0 | 1; throttle: -1 | 0 | 1 };           // ゲーム（racer）が受け取る操作
+type Plan = { targetX: number; throttle: -1 | 0 | 1 };               // Jev の判断。targetX は 5 レーンの中心（-0.8/-0.4/0/0.4/0.8）
+type SystemOneResponse = { plan: Plan | null; latencyMs: number; source: 'jev' | 'hold' }; // Jev が失敗したら plan は null
+// クライアントが送る観測 Observation には、現在の目標レーン targetX（省略可）を含める。
+
+// 【2026-10-02 変更】Jev は「左・直進・右」の生の操作ではなく、目標レーンと加減速を選ぶ（Plan）。
+// サーバーが観測から 5 レーンの余裕（clearance、遅延補償つき）を計算して Jev に渡し、Jev は目標レーン（5択）と throttle（3択）を選ぶ。
+// ゲーム側の低レベル制御が、毎フレーム、目標レーンへ操舵する（steer = laneSteer(playerX, targetX)）。
+// 理由: 判断の更新が約0.5秒に1回で、切りっぱなしだと衝突が多い。模擬実験で距離あたり衝突が約40%減（1.016→0.605）、
+// 実 Jev・ブラウザ65秒でも 0.92→0.608（操作なしは約1.19）。
 ```
 
 ## 5. 検出方式
@@ -75,7 +83,7 @@ type SystemOneResponse = { action: Action | null; latencyMs: number; source: 'je
 
 ## 7. エラー処理
 
-- Jev が 1000ms 以内に返さない、またはエラーを返した場合は直前の Action を維持する（`source: 'hold'`）。実測の応答時間は初回 500〜800ms、ウォームアップ後 335〜390ms のため、当初の 400ms から延長した（Jev の回答は A=延長で確率 0.51 と採用基準 0.8 未満だったが、A と C は両立し、実測でも質問数を減らして改善しなかったため A を採用。docs/decisions/jev-log.md）。
+- Jev が 1000ms 以内に返さない、またはエラーを返した場合は直前の Plan を維持する（`source: 'hold'`）。実測の応答時間は初回 500〜800ms、ウォームアップ後 335〜390ms のため、当初の 400ms から延長した（Jev の回答は A=延長で確率 0.51 と採用基準 0.8 未満だったが、A と C は両立し、実測でも質問数を減らして改善しなかったため A を採用。docs/decisions/jev-log.md）。
 - 連続5回失敗した場合は、画面に「Jev 応答なし」を出し、自動で停止する。
 - `AI_GATEWAY_API_KEY` 未設定ならサーバー起動時にエラーにする。
 - クレジット保護のため、Jev 操作は1回の連続稼働を最大3分で自動停止する。停止ボタンも常に出す。

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ruleAction } from '../../src/server/rule';
+import { obstacleBox } from '../../src/game/projection';
+import { rulePlan } from '../../src/server/rule';
 import type { Observation } from '../../src/lib/types';
 
 const base: Observation = {
@@ -8,19 +9,15 @@ const base: Observation = {
   obstacles: [],
 };
 
-describe('ruleAction', () => {
-  it('何もなければ直進して加速', () => {
-    expect(ruleAction(base)).toEqual({ steer: 0, throttle: 1 });
+describe('rulePlan（JEV_MOCK 用。5 レーンの余裕から Plan を返す）', () => {
+  it('何もなければ現在のレーンを維持して加速', () => {
+    expect(rulePlan(base)).toEqual({ targetX: 0, throttle: 1 });
   });
-  it('道路の右にずれていたら左へ戻す', () => {
-    expect(ruleAction({ ...base, road: { ...base.road, centerOffset: 0.5 } }).steer).toBe(-1);
+  it('正面の障害物は空いている far_left へよける', () => {
+    const o = { ...obstacleBox({ x: 0.05, z: 0.5 }, 0), cls: 'car' as const, conf: 1 };
+    expect(rulePlan({ ...base, obstacles: [o] })).toEqual({ targetX: -0.8, throttle: 1 });
   });
-  it('正面の近い障害物（左寄り）は右へよける', () => {
-    const o = { cls: 'car' as const, conf: 0.9, x: 0.42, y: 0.5, w: 0.2, h: 0.2 }; // 中心 0.52、接地 0.7
-    expect(ruleAction({ ...base, obstacles: [o] })).toEqual({ steer: -1, throttle: 0 });
-  });
-  it('遠い障害物は無視する', () => {
-    const o = { cls: 'car' as const, conf: 0.9, x: 0.45, y: 0.4, w: 0.1, h: 0.1 }; // 接地 0.5
-    expect(ruleAction({ ...base, obstacles: [o] }).throttle).toBe(1);
+  it('targetX を現在のレーンとして維持する', () => {
+    expect(rulePlan({ ...base, targetX: -0.8 }).targetX).toBe(-0.8);
   });
 });

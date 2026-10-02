@@ -31,21 +31,29 @@ describe('POST /api/systemone', () => {
   });
   afterEach(() => vi.unstubAllEnvs());
 
-  it('Jev の Action を返す', async () => {
-    vi.mocked(decide).mockResolvedValue({ steer: 1, throttle: 1 });
+  it('Jev の Plan を返す', async () => {
+    vi.mocked(decide).mockResolvedValue({ targetX: 0.4, throttle: 1 });
     const res = await POST(req(validBody));
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.action).toEqual({ steer: 1, throttle: 1 });
+    expect(json.plan).toEqual({ targetX: 0.4, throttle: 1 });
     expect(json.source).toBe('jev');
     expect(typeof json.latencyMs).toBe('number');
   });
 
-  it('Jev が失敗（null）なら action: null / source: hold', async () => {
+  it('Jev が失敗（null）なら plan: null / source: hold', async () => {
     vi.mocked(decide).mockResolvedValue(null);
     const json = await (await POST(req(validBody))).json();
-    expect(json.action).toBeNull();
+    expect(json.plan).toBeNull();
     expect(json.source).toBe('hold');
+  });
+
+  it('targetX は -1.3〜1.3 の数値なら受け付け、範囲外は 400', async () => {
+    vi.mocked(decide).mockResolvedValue({ targetX: 0, throttle: 0 });
+    expect((await POST(req({ ...validBody, targetX: 0.4 }))).status).toBe(200);
+    expect(vi.mocked(decide).mock.calls[0][0].targetX).toBe(0.4);
+    expect((await POST(req({ ...validBody, targetX: 2 }))).status).toBe(400);
+    expect((await POST(req({ ...validBody, targetX: 'a' }))).status).toBe(400);
   });
 
   it('不正な入力は 400', async () => {
@@ -60,7 +68,7 @@ describe('POST /api/systemone', () => {
   });
 
   it('同一オリジンは通す', async () => {
-    vi.mocked(decide).mockResolvedValue({ steer: 0, throttle: 0 });
+    vi.mocked(decide).mockResolvedValue({ targetX: 0, throttle: 0 });
     const res = await POST(req(validBody, { origin: 'http://localhost:3000' }));
     expect(res.status).toBe(200);
   });
@@ -80,7 +88,7 @@ describe('POST /api/systemone', () => {
   });
 
   it('同一キーで連続 11 回目は 429', async () => {
-    vi.mocked(decide).mockResolvedValue({ steer: 0, throttle: 0 });
+    vi.mocked(decide).mockResolvedValue({ targetX: 0, throttle: 0 });
     const h = { 'x-forwarded-for': '203.0.113.9' };
     const statuses: number[] = [];
     for (let i = 0; i < 11; i++) statuses.push((await POST(req(validBody, h))).status);
@@ -94,12 +102,22 @@ describe('POST /api/systemone', () => {
     expect(res.status).toBe(500);
   });
 
-  it('JEV_MOCK=1 ならキー不要でルール操作を返し、Jev を呼ばない', async () => {
+  it('JEV_MODEL 未設定は 500（モックでなければ）', async () => {
+    vi.stubEnv('JEV_MODEL', '');
+    // レート制限（同一キー 10 回/秒）に当たらないよう別キーで送る
+    const res = await POST(req(validBody, { 'x-forwarded-for': '203.0.113.50' }));
+    expect(res.status).toBe(500);
+    expect(decide).not.toHaveBeenCalled();
+  });
+
+  it('JEV_MOCK=1 ならキー不要でルール式の Plan を返し、Jev を呼ばない', async () => {
     vi.stubEnv('AI_GATEWAY_API_KEY', '');
     vi.stubEnv('JEV_MOCK', '1');
     const res = await POST(req(validBody));
     expect(res.status).toBe(200);
-    expect((await res.json()).action).not.toBeNull();
+    const json = await res.json();
+    expect(json.plan).not.toBeNull();
+    expect([-0.8, -0.4, 0, 0.4, 0.8]).toContain(json.plan.targetX);
     expect(decide).not.toHaveBeenCalled();
   });
 });

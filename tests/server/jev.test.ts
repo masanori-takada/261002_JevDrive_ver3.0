@@ -8,40 +8,66 @@ const obs: Observation = {
   obstacles: [],
 };
 
-const answer = (steer: string, throttle: string) => ({
-  answers: { steer: { choice: steer }, throttle: { choice: throttle } },
+const answer = (lane: string, throttle: string) => ({
+  answers: { lane: { choice: lane }, throttle: { choice: throttle } },
 });
+const opts = (evaluate: EvaluateFn) => ({ model: 'm', timeoutMs: 1000, evaluate });
 
 describe('decide', () => {
-  it('Jev の選択を Action に変換する', async () => {
+  it('Jev の選択を Plan（目標レーンの中心と throttle）に変換する', async () => {
     const evaluate = vi.fn<EvaluateFn>().mockResolvedValue(answer('right', 'accelerate'));
-    expect(await decide(obs, { model: 'm', timeoutMs: 1000, evaluate })).toEqual({ steer: 1, throttle: 1 });
+    expect(await decide(obs, opts(evaluate))).toEqual({ targetX: 0.4, throttle: 1 });
   });
-  it('left/brake と straight/hold も変換する', async () => {
-    const e1 = vi.fn<EvaluateFn>().mockResolvedValue(answer('left', 'brake'));
-    expect(await decide(obs, { model: 'm', timeoutMs: 1000, evaluate: e1 })).toEqual({ steer: -1, throttle: -1 });
-    const e2 = vi.fn<EvaluateFn>().mockResolvedValue(answer('straight', 'hold'));
-    expect(await decide(obs, { model: 'm', timeoutMs: 1000, evaluate: e2 })).toEqual({ steer: 0, throttle: 0 });
+  it('5 レーンと throttle 3 択をすべて変換する', async () => {
+    const lanes: [string, number][] = [['far_left', -0.8], ['left', -0.4], ['center', 0], ['right', 0.4], ['far_right', 0.8]];
+    for (const [name, x] of lanes) {
+      const e = vi.fn<EvaluateFn>().mockResolvedValue(answer(name, 'hold'));
+      expect(await decide(obs, opts(e))).toEqual({ targetX: x, throttle: 0 });
+    }
+    const e = vi.fn<EvaluateFn>().mockResolvedValue(answer('center', 'brake'));
+    expect(await decide(obs, opts(e))).toEqual({ targetX: 0, throttle: -1 });
   });
-  it('観測・モデル・タイムアウト・再試行なしを渡す', async () => {
-    const evaluate = vi.fn<EvaluateFn>().mockResolvedValue(answer('straight', 'hold'));
-    await decide(obs, { model: 'test/model', timeoutMs: 1000, evaluate });
+  it('各レーンの余裕と現在のレーンを状態に、モデル・タイムアウト・再試行なしを渡す', async () => {
+    const evaluate = vi.fn<EvaluateFn>().mockResolvedValue(answer('center', 'hold'));
+    await decide({ ...obs, targetX: 0.4 }, { model: 'test/model', timeoutMs: 1000, evaluate });
     const args = evaluate.mock.calls[0][0];
     expect(args.model).toBe('test/model');
-    expect(args.state.観測).toEqual(obs);
+    const st = args.state as { 現在のレーン: string; 各レーンの余裕: Record<string, number> };
+    expect(st.現在のレーン).toBe('right');
+    expect(Object.keys(st.各レーンの余裕)).toEqual(['far_left', 'left', 'center', 'right', 'far_right']);
     expect(args.maxRetries).toBe(0);
     expect(args.abortSignal).toBeInstanceOf(AbortSignal);
-    expect(Object.keys(args.questions)).toEqual(['steer', 'throttle']);
+    expect(Object.keys(args.questions)).toEqual(['lane', 'throttle']);
+  });
+  it('targetX が無ければ中央を現在のレーンとする', async () => {
+    const evaluate = vi.fn<EvaluateFn>().mockResolvedValue(answer('center', 'hold'));
+    await decide(obs, opts(evaluate));
+    expect((evaluate.mock.calls[0][0].state as { 現在のレーン: string }).現在のレーン).toBe('center');
   });
   it('評価が失敗したら null', async () => {
     const evaluate = vi.fn<EvaluateFn>().mockRejectedValue(new Error('timeout'));
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(await decide(obs, { model: 'm', timeoutMs: 1000, evaluate })).toBeNull();
+    expect(await decide(obs, opts(evaluate))).toBeNull();
     expect(spy).toHaveBeenCalledWith('[jev] evaluate failed:', 'timeout');
     spy.mockRestore();
   });
-  it('想定外の選択肢なら null', async () => {
-    const evaluate = vi.fn<EvaluateFn>().mockResolvedValue(answer('up', 'accelerate'));
-    expect(await decide(obs, { model: 'm', timeoutMs: 1000, evaluate })).toBeNull();
+  it('想定外の選択肢なら、選択肢名だけを console.error に出して null', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await decide(obs, opts(vi.fn<EvaluateFn>().mockResolvedValue(answer('up', 'accelerate'))))).toBeNull();
+    expect(spy).toHaveBeenLastCalledWith('[jev] unexpected choice:', 'up');
+    expect(await decide(obs, opts(vi.fn<EvaluateFn>().mockResolvedValue(answer('left', 'fly'))))).toBeNull();
+    expect(spy).toHaveBeenLastCalledWith('[jev] unexpected choice:', 'fly');
+    spy.mockRestore();
+  });
+  it('evaluate が永遠に解決しなくても timeoutMs 付近で null を返す', async () => {
+    const evaluate: EvaluateFn = () => new Promise(() => {});
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const t0 = Date.now();
+    const r = await decide(obs, { model: 'm', timeoutMs: 50, evaluate });
+    const dt = Date.now() - t0;
+    expect(r).toBeNull();
+    expect(dt).toBeGreaterThanOrEqual(40);
+    expect(dt).toBeLessThan(500);
+    spy.mockRestore();
   });
 });

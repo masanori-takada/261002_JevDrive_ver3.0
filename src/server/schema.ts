@@ -1,10 +1,7 @@
 import { z } from 'zod';
 
-const steer = z.union([z.literal(-1), z.literal(0), z.literal(1)]);
-
-export const ActionSchema = z.object({ steer, throttle: steer });
-
 export const ObservationSchema = z.object({
+  targetX: z.number().min(-1.3).max(1.3).optional(),
   frame: z.number().int().nonnegative(),
   speed: z.number().min(0).max(1),
   road: z.object({ left: z.number(), right: z.number(), centerOffset: z.number() }),

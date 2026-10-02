@@ -17,13 +17,13 @@ export type GameState = {
 export const DT = 1 / 60;
 const ACCEL = 0.6;          // 1秒あたりの速度変化
 const STEER_RATE = 1.2;     // 1秒あたりの横移動（速度1のとき）
-const Z_RATE = 0.5;         // 速度1のときの1秒あたりの z 減少
+export const Z_RATE = 0.5;         // 速度1のときの1秒あたりの z 減少
 const SPAWN_GAP = 0.5;      // この走行距離ごとに障害物を1つ出す
 const CRASH_FRAMES = 45;
 const RECOVER_SPEED = 0.3;
 const OFFROAD_SPEED = 0.3;
 const HIT_Z = 0.1;
-const HIT_DX = 0.55;
+export const HIT_DX = 0.55;
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));

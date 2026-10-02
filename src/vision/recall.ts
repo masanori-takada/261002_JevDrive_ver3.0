@@ -27,3 +27,13 @@ export function computeRecall(
   }
   return { matched, total: expected.length };
 }
+
+/** 適合率の元データ。正解のどれにも一致しなかった検出を誤検出とみなし、一致した検出数と全検出数を返す */
+export function computePrecision(
+  expected: Box[],
+  detected: Box[],
+  iouThreshold = 0.3,
+): { matched: number; detected: number } {
+  // 一致した検出の数は、再現率の貪欲割り当てで使われた検出の数と同じ
+  return { matched: computeRecall(expected, detected, iouThreshold).matched, detected: detected.length };
+}

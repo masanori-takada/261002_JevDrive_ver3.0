@@ -8,13 +8,16 @@
     "build": "next build",
     "start": "next start",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit --incremental false",
     "check-env": "node scripts/check-env.mjs",
     "copy-ort": "node scripts/copy-ort.mjs",
-    "gen-dataset": "tsx scripts/gen-dataset.ts"
+    "gen-dataset": "tsx scripts/gen-dataset.ts",
+    "gate": "tsx scripts/gate.ts",
+    "sim": "tsx scripts/sim.ts",
+    "jev-accuracy": "tsx scripts/jev-accuracy.ts"
   },
   "dependencies": {
-    "ai": "^7.0.127",
+    "ai": "7.0.127",
     "next": "^16.3.8",
     "onnxruntime-web": "^1.30.0",
     "react": "^19.3.0",
@@ -26,6 +29,7 @@
     "@types/node": "^26.6.4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "onnxruntime-node": "^1.30.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"
