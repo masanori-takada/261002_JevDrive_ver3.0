@@ -4,6 +4,7 @@ import { obstacleBox } from '../../game/projection';
 import { renderGame } from '../../game/render';
 import { makeScene } from '../../game/scene';
 import { getDetector } from '../../vision/detector';
+import { pickModel } from '../../vision/model-config';
 import { computeRecall } from '../../vision/recall';
 
 const W = 640, H = 360, SCENES = 100, GATE = 0.8;
@@ -13,7 +14,9 @@ export default function DebugPage() {
 
   async function run() {
     setResult('モデル読み込み中…');
-    const detector = await getDetector();
+    // ?model=256 で 256 モデルを測れる（既定は製品のモデル）
+    const model = pickModel(new URLSearchParams(window.location.search).get('model'));
+    const detector = await getDetector(model);
     const canvas = document.createElement('canvas');
     canvas.width = W;
     canvas.height = H;
@@ -31,7 +34,7 @@ export default function DebugPage() {
     }
     const recall = matched / total;
     setResult(
-      `再現率 ${recall.toFixed(3)}（${matched}/${total}）、平均推論 ${(ms / SCENES).toFixed(1)}ms、` +
+      `${model.url}（${model.size}）再現率 ${recall.toFixed(3)}（${matched}/${total}）、平均推論 ${(ms / SCENES).toFixed(1)}ms、` +
         `ゲート ${recall >= GATE ? 'PASS' : 'FAIL'}（基準 ${GATE}）`,
     );
   }

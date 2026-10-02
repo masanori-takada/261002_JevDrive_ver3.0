@@ -1,5 +1,6 @@
 import type { Box } from '../lib/types';
 import type { GameState } from './racer';
+import { dashStarts, DASH_LEN } from './road-dash';
 import { ASPECT, baseY, HORIZON, obstacleBox, screenX, T_BOTTOM } from './projection';
 
 // 路面色は vision/road.ts の判定（彩度が低く明るさ50以上）に合わせた灰色にする
@@ -59,13 +60,14 @@ export function renderGame(ctx: CanvasRenderingContext2D, s: GameState, o: Rende
   line(ctx, xr0, yTop, xr1, H);
 
   // レーン破線（走行距離に応じて手前へ流れる）
-  const N = 10;
-  const phase = (s.distance * 2) % 1;
+  // 破線は世界の奥行き z に置き、障害物と同じ投影（t = 1 − z、線形）で描く
+  const zMin = 1 - T_BOTTOM;
   for (const u of [-1 / 3, 1 / 3]) {
-    for (let i = 0; i < N; i++) {
-      const p0 = (i + phase) / N;
-      const p1 = Math.min((i + phase + 0.5) / N, 1);
-      const t0 = p0 * p0 * T_BOTTOM, t1 = p1 * p1 * T_BOTTOM;
+    for (const z of dashStarts(s.distance)) {
+      const zNear = Math.max(z, zMin);
+      const zFar = Math.min(z + DASH_LEN, 1);
+      if (zFar <= zNear) continue;
+      const t0 = 1 - zFar, t1 = 1 - zNear;
       ctx.lineWidth = 1 + 5 * t1;
       line(ctx, screenX(u, s.playerX, t0) * W, baseY(t0) * H, screenX(u, s.playerX, t1) * W, baseY(t1) * H);
     }

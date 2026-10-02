@@ -3,16 +3,18 @@ import * as ort from 'onnxruntime-node';
 import { obstacleBox } from '../src/game/projection';
 import { renderGame } from '../src/game/render';
 import { makeScene } from '../src/game/scene';
+import { MODEL as DEFAULT_MODEL } from '../src/vision/model-config';
 import { decodeYolo } from '../src/vision/decode';
 import { toTensorData } from '../src/vision/preprocess';
 import { computePrecision, computeRecall } from '../src/vision/recall';
 
 const W = 640;
 const H = 360;
-const INPUT = 320;
+// 環境変数 GATE_SIZE / GATE_MODEL で入力サイズとモデルを切り替える（既定は model-config）
+const INPUT = Number(process.env.GATE_SIZE ?? DEFAULT_MODEL.size);
 const SCENES = 100;
 const GATE = 0.8;
-const MODEL = 'public/models/yolo11n-jev.onnx';
+const MODEL = process.env.GATE_MODEL ?? `public${DEFAULT_MODEL.url}`;
 
 async function main(): Promise<void> {
   const session = await ort.InferenceSession.create(MODEL, { executionProviders: ['cpu'] });
@@ -25,7 +27,7 @@ async function main(): Promise<void> {
   for (let i = 0; i < SCENES; i++) {
     const s = makeScene(i);
     renderGame(srcCtx as unknown as CanvasRenderingContext2D, s, { width: W, height: H, player: false });
-    inpCtx.drawImage(src, 0, 0, INPUT, INPUT); // 320×320 に引き伸ばす
+    inpCtx.drawImage(src, 0, 0, INPUT, INPUT); // 入力サイズに引き伸ばす
     const { data } = inpCtx.getImageData(0, 0, INPUT, INPUT);
     const tensor = new ort.Tensor('float32', toTensorData(data, INPUT), [1, 3, INPUT, INPUT]);
 

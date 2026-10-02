@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGame } from '../../src/game/racer';
+import { createGame, V_CAR, Z_RATE } from '../../src/game/racer';
 import { LANES3, LANES5 } from '../../src/vision/lanes';
 import { selectLaneIdx } from '../../src/vision/lane-plan';
 import { makeLanePolicy } from '../../src/sim/lane-obs';
@@ -40,10 +40,10 @@ describe('makeLanePolicy', () => {
     expect(p.decide(s, p.initial).throttle).toBe(0);
   });
   it('遅延補償ありは、反映時点で通過している障害物を無視する', () => {
-    const s = { ...createGame(1), speed: 0.7, obstacles: [{ id: 1, x: 0, z: 0.1 }] };
+    const s = { ...createGame(1), speed: 0.7, obstacles: [{ id: 1, x: 0, z: 0.08 }] };
     const noComp = makeLanePolicy({ ...base, margin: 5 }).decide(s, { idx: 1, throttle: 0 });
     expect(noComp.throttle).toBe(0);
-    const comp = makeLanePolicy({ ...base, margin: 5, compensateL: 0.55 }); // 0.5*0.7*0.55 進む
+    const comp = makeLanePolicy({ ...base, margin: 5, compensateL: 0.55 }); // (0.7-V_CAR)*Z_RATE*0.55 = 0.11 進む
     expect(comp.decide(s, { idx: 1, throttle: 0 }).throttle).toBe(0 + 1); // 障害物は通過扱いで加速
   });
   it('5 レーンの初期は中央（idx=2）', () => {
@@ -100,6 +100,6 @@ describe('observeClearances', () => {
     const s = { ...createGame(1), speed: 0.7, obstacles: [{ id: 1, x: 0, z: 0.5 }] };
     const r = observeClearances(s, cfg);
     expect(r.speed).toBeCloseTo(0.7, 3);
-    expect(r.cl[1]).toBeCloseTo(0.5 - 0.7 * 0.5 * 0.55, 2);
+    expect(r.cl[1]).toBeCloseTo(0.5 - (0.7 - V_CAR) * Z_RATE * 0.55, 2);
   });
 });

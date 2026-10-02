@@ -6,6 +6,7 @@ vi.mock('../../src/server/jev', async (orig) => {
 });
 
 import { decide } from '../../src/server/jev';
+import { buildJevDetail } from '../../src/server/jev-detail';
 import { POST } from '../../src/app/api/systemone/route';
 
 const validBody = {
@@ -32,13 +33,15 @@ describe('POST /api/systemone', () => {
   afterEach(() => vi.unstubAllEnvs());
 
   it('Jev の Plan を返す', async () => {
-    vi.mocked(decide).mockResolvedValue({ targetX: 0.4, throttle: 1 });
+    vi.mocked(decide).mockResolvedValue({ plan: { targetX: 0.4, throttle: 1 }, detail: buildJevDetail('center', 'hold') });
     const res = await POST(req(validBody));
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.plan).toEqual({ targetX: 0.4, throttle: 1 });
     expect(json.source).toBe('jev');
     expect(typeof json.latencyMs).toBe('number');
+    expect(json.detail.lane).toHaveLength(5);
+    expect(json.detail.throttle).toHaveLength(3);
   });
 
   it('Jev が失敗（null）なら plan: null / source: hold', async () => {
@@ -46,10 +49,11 @@ describe('POST /api/systemone', () => {
     const json = await (await POST(req(validBody))).json();
     expect(json.plan).toBeNull();
     expect(json.source).toBe('hold');
+    expect('detail' in json).toBe(false);
   });
 
   it('targetX は -1.3〜1.3 の数値なら受け付け、範囲外は 400', async () => {
-    vi.mocked(decide).mockResolvedValue({ targetX: 0, throttle: 0 });
+    vi.mocked(decide).mockResolvedValue({ plan: { targetX: 0, throttle: 0 }, detail: buildJevDetail('center', 'hold') });
     expect((await POST(req({ ...validBody, targetX: 0.4 }))).status).toBe(200);
     expect(vi.mocked(decide).mock.calls[0][0].targetX).toBe(0.4);
     expect((await POST(req({ ...validBody, targetX: 2 }))).status).toBe(400);
@@ -68,7 +72,7 @@ describe('POST /api/systemone', () => {
   });
 
   it('同一オリジンは通す', async () => {
-    vi.mocked(decide).mockResolvedValue({ targetX: 0, throttle: 0 });
+    vi.mocked(decide).mockResolvedValue({ plan: { targetX: 0, throttle: 0 }, detail: buildJevDetail('center', 'hold') });
     const res = await POST(req(validBody, { origin: 'http://localhost:3000' }));
     expect(res.status).toBe(200);
   });
@@ -88,7 +92,7 @@ describe('POST /api/systemone', () => {
   });
 
   it('同一キーで連続 11 回目は 429', async () => {
-    vi.mocked(decide).mockResolvedValue({ targetX: 0, throttle: 0 });
+    vi.mocked(decide).mockResolvedValue({ plan: { targetX: 0, throttle: 0 }, detail: buildJevDetail('center', 'hold') });
     const h = { 'x-forwarded-for': '203.0.113.9' };
     const statuses: number[] = [];
     for (let i = 0; i < 11; i++) statuses.push((await POST(req(validBody, h))).status);
@@ -118,6 +122,11 @@ describe('POST /api/systemone', () => {
     const json = await res.json();
     expect(json.plan).not.toBeNull();
     expect([-0.8, -0.4, 0, 0.4, 0.8]).toContain(json.plan.targetX);
+    // 選ばれたものが 1、他が 0 の detail を同じ形で返す
+    expect(json.detail.lane).toHaveLength(5);
+    expect(json.detail.throttle).toHaveLength(3);
+    expect(json.detail.lane.filter((l: { prob: number }) => l.prob === 1)).toHaveLength(1);
+    expect(json.detail.lane.find((l: { prob: number }) => l.prob === 1).name).toBe(json.detail.laneChoice);
     expect(decide).not.toHaveBeenCalled();
   });
 });

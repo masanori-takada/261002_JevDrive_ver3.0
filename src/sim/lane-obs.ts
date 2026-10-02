@@ -1,5 +1,5 @@
 // 観測（検出ボックス）だけで判断するレーン目標方式。レーン数・閾値・遅延補償を設定で変えられる
-import { Z_RATE, type GameState } from '../game/racer';
+import { closingAdvance, type GameState } from '../game/racer';
 import { clearancesFor, type LaneSpec } from '../vision/lanes';
 import { laneSteer } from '../game/steer';
 import { decideFromClearances, type LaneDecision } from '../vision/lane-plan';
@@ -22,7 +22,7 @@ export type ObsLaneDecision = LaneDecision;
 /** 判断時点の速度と、（遅延補償込みの）各レーンの余裕。観測だけから作る */
 export function observeClearances(s: GameState, c: LaneConfig): { speed: number; cl: number[] } {
   const obs = buildSimObservation(s, { round: c.round });
-  const advance = obs.speed * Z_RATE * c.compensateL;
+  const advance = closingAdvance(obs.speed, c.compensateL);
   return { speed: obs.speed, cl: clearancesFor(obs, c.spec, advance) };
 }
 

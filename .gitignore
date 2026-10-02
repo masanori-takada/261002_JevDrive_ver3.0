@@ -10,3 +10,10 @@ dataset
 runs
 *.pt
 runs_train.log
+dataset256
+runs_train256.log
+docs/demo/*.mp4
+docs/demo/*.webm
+docs/demo/raw
+.playwright-mcp
+docs/demo/motion-check.png

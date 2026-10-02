@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGame, step } from '../../src/game/racer';
+import { closingAdvance, createGame, DEFAULT_SPAWN_GAP, step, V_CAR, Z_RATE } from '../../src/game/racer';
 
 const idle = { steer: 0, throttle: 0 } as const;
 
@@ -28,7 +28,7 @@ describe('racer', () => {
 
   it('走ると障害物が出現し、横位置は -0.8..0.8', () => {
     let s = createGame(1);
-    for (let i = 0; i < 200; i++) s = step(s, idle);
+    for (let i = 0; i < 400; i++) s = step(s, idle); // 走行距離 3.3 > 既定の出現間隔
     expect(s.obstacles.length).toBeGreaterThanOrEqual(1);
     for (const o of s.obstacles) {
       expect(o.x).toBeGreaterThanOrEqual(-0.8);
@@ -72,5 +72,42 @@ describe('racer', () => {
       return JSON.stringify(s);
     };
     expect(run()).toBe(run());
+  });
+
+  it('出現間隔は createGame の引数で差し替えられ、既定値は DEFAULT_SPAWN_GAP', () => {
+    expect(createGame(1).spawnGap).toBe(DEFAULT_SPAWN_GAP);
+    expect(createGame(1, 2).spawnGap).toBe(2);
+  });
+
+  it('間隔が広いほど、同じ走行距離での出現数が少ない（走れば出現する）', () => {
+    const count = (gap: number) => {
+      // 速度を 1 に固定して 20 秒走る（走行距離 20）。障害物は id の最大値で数える
+      let s = { ...createGame(1, gap), speed: 1 };
+      for (let i = 0; i < 1200; i++) s = { ...step({ ...s, speed: 1, crashedUntil: 0 }, idle), speed: 1 };
+      return s.nextId - 1;
+    };
+    expect(count(0.5)).toBeGreaterThan(count(2));
+    expect(count(2)).toBeGreaterThanOrEqual(1);
+    expect(count(2)).toBeLessThanOrEqual(11);
+  });
+
+  it('障害物は自車と同じ向きに走る車: z は (speed − V_CAR) * Z_RATE * DT で減る', () => {
+    expect(V_CAR).toBe(0.3);
+    const base = { ...createGame(1), speed: 0.8, playerX: 0, obstacles: [{ id: 1, x: 0.9, z: 0.5 }] };
+    const s = step(base, idle);
+    expect(s.obstacles.find((o) => o.id === 1)!.z).toBeCloseTo(0.5 - (0.8 - V_CAR) * Z_RATE * (1 / 60), 9);
+  });
+
+  it('自車が V_CAR より遅いと車は遠ざかり、z > 1.02 で削除される', () => {
+    const base = { ...createGame(1), speed: 0.1, obstacles: [{ id: 1, x: 0.9, z: 1.0 }, { id: 2, x: -0.9, z: 1.02 }] };
+    const s = step(base, idle);
+    expect(s.obstacles.find((o) => o.id === 1)!.z).toBeGreaterThan(1.0);
+    expect(s.obstacles.find((o) => o.id === 2)).toBeUndefined();
+  });
+
+  it('closingAdvance は障害物の接近量（遅延 L 秒ぶん）。V_CAR 以下は 0', () => {
+    expect(closingAdvance(0.8, 0.5)).toBeCloseTo((0.8 - V_CAR) * Z_RATE * 0.5, 9);
+    expect(closingAdvance(V_CAR, 0.5)).toBe(0);
+    expect(closingAdvance(0.1, 0.5)).toBe(0);
   });
 });

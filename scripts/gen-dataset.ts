@@ -3,10 +3,12 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { createGame, type GameState } from '../src/game/racer';
 import { obstacleBox } from '../src/game/projection';
 import { renderGame } from '../src/game/render';
+import { MODEL } from '../src/vision/model-config';
 
 const SRC_W = 640;
 const SRC_H = 360;
-const OUT = 320;       // 推論と同じ 320×320（引き伸ばし）
+const OUT = Number(process.env.YOLO_IMGSZ ?? MODEL.size); // 推論と同じ入力サイズ（引き伸ばし）
+const DIR = process.env.DATASET_DIR ?? 'dataset';        // 出力先（256 用は dataset256 など）
 const TRAIN = 800;
 const VAL = 200;
 const CAR_CLASS = 2;   // COCO の car
@@ -43,14 +45,14 @@ const outCtx = out.getContext('2d');
 let totalBoxes = 0;
 
 function writeSplit(split: 'train' | 'val', count: number, seedBase: number): void {
-  mkdirSync(`dataset/images/${split}`, { recursive: true });
-  mkdirSync(`dataset/labels/${split}`, { recursive: true });
+  mkdirSync(`${DIR}/images/${split}`, { recursive: true });
+  mkdirSync(`${DIR}/labels/${split}`, { recursive: true });
   for (let i = 0; i < count; i++) {
     const s = randomScene(seedBase + i);
     renderGame(srcCtx as unknown as CanvasRenderingContext2D, s, { width: SRC_W, height: SRC_H, player: false });
     outCtx.drawImage(src, 0, 0, OUT, OUT);
     const name = String(i).padStart(5, '0');
-    writeFileSync(`dataset/images/${split}/${name}.png`, out.toBuffer('image/png'));
+    writeFileSync(`${DIR}/images/${split}/${name}.png`, out.toBuffer('image/png'));
 
     const lines: string[] = [];
     for (const o of s.obstacles) {
@@ -61,7 +63,7 @@ function writeSplit(split: 'train' | 'val', count: number, seedBase: number): vo
       lines.push(`${CAR_CLASS} ${((x1 + x2) / 2).toFixed(6)} ${((y1 + y2) / 2).toFixed(6)} ${(x2 - x1).toFixed(6)} ${(y2 - y1).toFixed(6)}`);
     }
     totalBoxes += lines.length;
-    writeFileSync(`dataset/labels/${split}/${name}.txt`, lines.join('\n') + (lines.length ? '\n' : ''));
+    writeFileSync(`${DIR}/labels/${split}/${name}.txt`, lines.join('\n') + (lines.length ? '\n' : ''));
   }
 }
 

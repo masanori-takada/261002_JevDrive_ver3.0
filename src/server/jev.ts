@@ -1,7 +1,8 @@
 import { experimental_evaluate as evaluate } from 'ai';
-import type { Observation, Plan, Steer } from '../lib/types';
+import type { JevDetail, Observation, Plan, Steer } from '../lib/types';
 import { MARGIN, nearestLaneIdx, observationClearances, THROTTLE_NEAR } from '../vision/lane-plan';
 import { LANES5 } from '../vision/lanes';
+import { buildJevDetail } from './jev-detail';
 import { buildJevQuestion, LANE_NAMES } from './jev-question';
 
 const THROTTLE_MAP: Record<string, Steer> = { brake: -1, hold: 0, accelerate: 1 };
@@ -13,14 +14,17 @@ export type EvaluateFn = (args: {
   maxRetries: number;
   abortSignal: AbortSignal;
 }) => Promise<{
-  answers: { lane: { choice: string }; throttle: { choice: string } };
+  answers: {
+    lane: { choice: string; probabilities?: Record<string, number> };
+    throttle: { choice: string; probabilities?: Record<string, number> };
+  };
 }>;
 
 /** 観測から各レーンの余裕を作って Jev に渡し、目標レーンと throttle を選ばせる */
 export async function decide(
   obs: Observation,
   opts: { model: string; timeoutMs: number; evaluate?: EvaluateFn },
-): Promise<Plan | null> {
+): Promise<{ plan: Plan; detail: JevDetail } | null> {
   const run = opts.evaluate ?? (evaluate as unknown as EvaluateFn);
   // AbortSignal を無視された場合でも打ち切れるよう、タイマーとも競わせる
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -52,7 +56,13 @@ export async function decide(
       console.error('[jev] unexpected choice:', laneIdx < 0 ? r.answers.lane.choice : r.answers.throttle.choice);
       return null;
     }
-    return { targetX: LANES5.centers[laneIdx], throttle };
+    return {
+      plan: { targetX: LANES5.centers[laneIdx], throttle },
+      detail: buildJevDetail(
+        r.answers.lane.choice, r.answers.throttle.choice,
+        r.answers.lane.probabilities, r.answers.throttle.probabilities,
+      ),
+    };
   } catch (e) {
     // メッセージのみ出力する（秘密は出さない）
     console.error('[jev] evaluate failed:', e instanceof Error ? e.message : String(e));

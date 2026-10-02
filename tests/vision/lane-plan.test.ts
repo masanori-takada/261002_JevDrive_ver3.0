@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { obstacleBox } from '../../src/game/projection';
+import { V_CAR, Z_RATE } from '../../src/game/racer';
 import type { Observation } from '../../src/lib/types';
 import {
-  decideFromClearances, nearestLaneIdx, observationClearances, planFromObservation, selectLaneIdx,
+  decideFromClearances, LATENCY_S, nearestLaneIdx, observationClearances, planFromObservation, selectLaneIdx,
 } from '../../src/vision/lane-plan';
 
 const obsOf = (o: { at?: { x: number; z: number }[]; targetX?: number; speed?: number } = {}): Observation => ({
@@ -50,11 +51,15 @@ describe('nearestLaneIdx', () => {
 });
 
 describe('observationClearances', () => {
-  it('遅延補償（speed * Z_RATE * 0.55）を引いた 5 レーンの余裕を返す', () => {
+  it('遅延補償（max(0, speed − V_CAR) * Z_RATE * LATENCY_S）を引いた 5 レーンの余裕を返す', () => {
     const cl = observationClearances(obsOf({ at: [{ x: 0.05, z: 0.5 }] }));
     expect(cl).toHaveLength(5);
-    expect(cl[2]).toBeCloseTo(0.5 - 0.5 * 0.5 * 0.55, 6);
+    expect(cl[2]).toBeCloseTo(0.5 - (0.5 - V_CAR) * Z_RATE * LATENCY_S, 6);
     expect(cl[0]).toBe(1); // far_left は範囲外（レーン幅 0.55）
+  });
+  it('速度が V_CAR 以下なら障害物は近づかないので、補償しない', () => {
+    const cl = observationClearances(obsOf({ at: [{ x: 0.05, z: 0.5 }], speed: V_CAR }));
+    expect(cl[2]).toBeCloseTo(0.5, 6);
   });
 });
 

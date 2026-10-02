@@ -1,5 +1,5 @@
 // 観測（検出ボックス）から 5 レーンの余裕を求め、目標レーンと throttle を決める（製品とシミュレーションで共用）
-import { Z_RATE } from '../game/racer';
+import { closingAdvance } from '../game/racer';
 import type { Observation, Plan, Steer } from '../lib/types';
 import { clearancesFor, LANES5 } from './lanes';
 
@@ -43,7 +43,7 @@ export function nearestLaneIdx(x: number): number {
 
 /** 5 レーンの余裕。判断が反映される L 秒後の位置に進めて評価する（遅延補償） */
 export function observationClearances(obs: Observation): number[] {
-  return clearancesFor(obs, LANES5, obs.speed * Z_RATE * LATENCY_S);
+  return clearancesFor(obs, LANES5, closingAdvance(obs.speed, LATENCY_S));
 }
 
 /** 観測だけから Plan を決める（モックのルール式）。targetX が無ければ中央を現在のレーンとする */

@@ -14,6 +14,7 @@
     "gen-dataset": "tsx scripts/gen-dataset.ts",
     "gate": "tsx scripts/gate.ts",
     "sim": "tsx scripts/sim.ts",
+    "motion-check": "tsx scripts/motion-check.ts",
     "jev-accuracy": "tsx scripts/jev-accuracy.ts"
   },
   "dependencies": {

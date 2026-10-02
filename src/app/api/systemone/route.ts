@@ -1,6 +1,6 @@
 import { decide } from '../../../server/jev';
 import { allow } from '../../../server/rate-limit';
-import { rulePlan } from '../../../server/rule';
+import { ruleDecision } from '../../../server/rule';
 import { ObservationSchema } from '../../../server/schema';
 import type { SystemOneResponse } from '../../../lib/types';
 
@@ -45,13 +45,15 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const start = Date.now();
-  const plan = mock
-    ? rulePlan(parsed.data)
+  const decision = mock
+    ? ruleDecision(parsed.data)
     : await decide(parsed.data, { model: process.env.JEV_MODEL!, timeoutMs: JEV_TIMEOUT_MS });
   const res: SystemOneResponse = {
-    plan,
+    plan: decision?.plan ?? null,
     latencyMs: Date.now() - start,
-    source: plan ? 'jev' : 'hold',
+    source: decision ? 'jev' : 'hold',
+    // 失敗（plan が null）のときは detail を付けない
+    ...(decision ? { detail: decision.detail } : {}),
   };
   return Response.json(res);
 }

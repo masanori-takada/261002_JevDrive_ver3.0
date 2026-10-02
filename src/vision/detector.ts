@@ -2,9 +2,9 @@ import type { Detection } from '../lib/types';
 import { selectBackend, wasmFallback, type Backend } from './backend';
 import { decodeYolo } from './decode';
 import { toTensorData } from './preprocess';
+import { MODEL, type ModelConfig } from './model-config';
 import { createSingleFlight } from './single-flight';
 
-export const INPUT_SIZE = 320;
 export type Detector = { detect(source: CanvasImageSource): Promise<Detection[]> };
 
 // onnxruntime-web は public/ort から <script> で読み込む（バンドラ経由にしない）
@@ -16,6 +16,7 @@ declare global {
 }
 
 let detectorPromise: Promise<Detector> | null = null;
+let detectorUrl: string | null = null;
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -27,18 +28,19 @@ function loadScript(src: string): Promise<void> {
   });
 }
 
-async function createSession(backend: Backend) {
+async function createSession(backend: Backend, model: ModelConfig) {
   await loadScript(backend.script);
   const ort = window.ort;
   ort.env.wasm.wasmPaths = '/ort/';
   ort.env.wasm.numThreads = backend.numThreads;
-  const session = await ort.InferenceSession.create('/models/yolo11n-jev.onnx', {
+  const session = await ort.InferenceSession.create(model.url, {
     executionProviders: backend.executionProviders,
   });
   return { ort, session };
 }
 
-async function create(): Promise<Detector> {
+async function create(model: ModelConfig): Promise<Detector> {
+  const INPUT_SIZE = model.size;
   const backend = selectBackend({
     hasWebGpu: 'gpu' in navigator,
     crossOriginIsolated: window.crossOriginIsolated,
@@ -47,12 +49,12 @@ async function create(): Promise<Detector> {
   // WebGPU のスクリプト読み込み・セッション作成のどちらかが失敗したら、WASM で作り直して続行する
   let made: Awaited<ReturnType<typeof createSession>>;
   try {
-    made = await createSession(backend);
+    made = await createSession(backend, model);
   } catch (e) {
     const fallback = wasmFallback(backend);
     if (!fallback) throw e;
     console.warn('[detector] WebGPU を使えないため WASM に切り替えます:', e instanceof Error ? e.message : String(e));
-    made = await createSession(fallback);
+    made = await createSession(fallback, model);
   }
   const { ort, session } = made;
 
@@ -98,8 +100,11 @@ async function create(): Promise<Detector> {
   };
 }
 
-export function getDetector(): Promise<Detector> {
-  detectorPromise ??= create().catch((e) => {
+export function getDetector(model: ModelConfig = MODEL): Promise<Detector> {
+  // モデルが変わったときは作り直す（通常は既定のまま 1 回だけ作る）
+  if (detectorUrl !== model.url) detectorPromise = null;
+  detectorUrl = model.url;
+  detectorPromise ??= create(model).catch((e) => {
     // 失敗したら破棄して、次回の呼び出しで再試行できるようにする
     detectorPromise = null;
     throw e;
