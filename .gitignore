@@ -13,6 +13,7 @@ runs_train.log
 dataset256
 runs_train256.log
 docs/demo/*.mp4
+!docs/demo/jev-drive-demo-x2.mp4
 docs/demo/*.webm
 docs/demo/raw
 .playwright-mcp

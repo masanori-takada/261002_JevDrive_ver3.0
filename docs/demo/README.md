@@ -1,6 +1,11 @@
 # デモ動画の録画方法と、Playwright MCP の課題メモ
 
-動画（`jev-drive-demo.mp4`、`motion-check.png`）は容量が大きいため git に入れていない（`.gitignore`）。判断は Jev（docs/decisions/jev-log.md）。
+公開用のデモ動画を追加しました。
+
+- [デモ動画（jev-drive-demo-x2.mp4）](./jev-drive-demo-x2.mp4)
+- [動画を直接開く・ダウンロードする](https://raw.githubusercontent.com/masanori-takada/261002_JevDrive_ver3.0/main/docs/demo/jev-drive-demo-x2.mp4)
+
+元の動画（`jev-drive-demo.mp4`）や `motion-check.png` は引き続きgitの対象外です（`.gitignore`）。判断は Jev（docs/decisions/jev-log.md）。
 
 ## 最終的な録画方法（Windows の画面録画＋Playwright MCP で操作）
 
