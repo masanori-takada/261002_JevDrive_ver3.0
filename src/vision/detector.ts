@@ -2,6 +2,7 @@ import type { Detection } from '../lib/types';
 import { selectBackend, wasmFallback, type Backend } from './backend';
 import { decodeYolo } from './decode';
 import { toTensorData } from './preprocess';
+import { createSingleFlight } from './single-flight';
 
 export const INPUT_SIZE = 320;
 export type Detector = { detect(source: CanvasImageSource): Promise<Detection[]> };
@@ -60,20 +61,39 @@ async function create(): Promise<Detector> {
   canvas.height = INPUT_SIZE;
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
 
+  // 推論本体。session.run は打ち切れないため、実行中は次の推論を始めさせない（single-flight）
+  const infer = async (input: Float32Array) => {
+    const tensor = new ort.Tensor('float32', input, [1, 3, INPUT_SIZE, INPUT_SIZE]);
+    const results = await session.run({ [session.inputNames[0]]: tensor });
+    return results[session.outputNames[0]];
+  };
+
+  // 暖機: 初回はシェーダのコンパイルで遅いので、ゼロ入力で 1 回だけ推論する（結果は捨てる）。失敗しても続行する
+  try {
+    await infer(new Float32Array(3 * INPUT_SIZE * INPUT_SIZE));
+  } catch (e) {
+    console.warn('[detector] 暖機推論に失敗しました（続行します）:', e instanceof Error ? e.message : String(e));
+  }
+
+  // 実行中でなければ（single-flight が通した呼び出しだけ）描画・前処理・推論を行う。
+  // source は runOnce が同期的に読み取るので、実行中の呼び出しが値を上書きしても影響しない
+  let pending: CanvasImageSource | null = null;
+  const runOnce = createSingleFlight(async () => {
+    ctx.drawImage(pending!, 0, 0, INPUT_SIZE, INPUT_SIZE);
+    const { data } = ctx.getImageData(0, 0, INPUT_SIZE, INPUT_SIZE);
+    const out = await infer(toTensorData(data, INPUT_SIZE));
+    if (out.dims[1] !== 84) throw new Error(`想定外の出力形状: ${out.dims.join('x')}`);
+    return decodeYolo(out.data as Float32Array, out.dims[2], {
+      inputSize: INPUT_SIZE,
+      confThreshold: 0.25,
+      iouThreshold: 0.45,
+    });
+  });
+
   return {
-    async detect(source) {
-      ctx.drawImage(source, 0, 0, INPUT_SIZE, INPUT_SIZE);
-      const { data } = ctx.getImageData(0, 0, INPUT_SIZE, INPUT_SIZE);
-      const input = toTensorData(data, INPUT_SIZE);
-      const tensor = new ort.Tensor('float32', input, [1, 3, INPUT_SIZE, INPUT_SIZE]);
-      const results = await session.run({ [session.inputNames[0]]: tensor });
-      const out = results[session.outputNames[0]];
-      if (out.dims[1] !== 84) throw new Error(`想定外の出力形状: ${out.dims.join('x')}`);
-      return decodeYolo(out.data as Float32Array, out.dims[2], {
-        inputSize: INPUT_SIZE,
-        confThreshold: 0.25,
-        iouThreshold: 0.45,
-      });
+    detect(source) {
+      pending = source;
+      return runOnce();
     },
   };
 }

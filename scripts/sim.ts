@@ -1,6 +1,8 @@
 // 模擬実験: 判断遅延のもとで運転方式ごとの衝突回数を比べる（npm run sim）
 import { HIT_DX } from '../src/game/racer';
-import { makeLanePolicy, type LaneConfig } from '../src/sim/lane-obs';
+import { laneSteer } from '../src/game/steer';
+import { makeLanePolicy, observeClearances, type LaneConfig, type ObsLaneDecision } from '../src/sim/lane-obs';
+import { selectLaneIdx } from '../src/vision/lane-plan';
 import { makePolicy, type Policy } from '../src/sim/policies';
 import { runEpisode } from '../src/sim/run';
 import { LANES3, LANES5, type LaneSpec } from '../src/vision/lanes';
@@ -120,4 +122,29 @@ for (const [name, seeds] of [['シード 1〜20', SEEDS], ['シード 21〜60', 
     const spec: LaneSpec = { ...LANES5, halfWidth: w };
     console.log(line(`5レーン+補償 halfWidth=${w}`, evaluate(lanePolicy(cfg(spec, 0.1, 0.3, true)), L, seeds)));
   }
+}
+
+// レーン変更中の throttle: 判断に使う余裕を「目標レーンのみ」（現行）と「現在→目標の間（両端含む）の最小」で比べる
+function pathPolicy(c: LaneConfig): Policy<ObsLaneDecision> {
+  return {
+    initial: { idx: Math.floor(c.spec.centers.length / 2), throttle: 0 },
+    decide: (s, current) => {
+      const { speed, cl } = observeClearances(s, c);
+      const idx = selectLaneIdx(cl, current.idx, c.margin);
+      const lo = Math.min(current.idx, idx);
+      const hi = Math.max(current.idx, idx);
+      const pathCl = Math.min(...cl.slice(lo, hi + 1));
+      return { idx, throttle: pathCl < c.throttleNear ? 0 : speed < 0.8 ? 1 : 0 };
+    },
+    toAction: (d, s) => ({ steer: laneSteer(s.playerX, c.spec.centers[d.idx]), throttle: d.throttle }),
+  };
+}
+console.log('\n【レーン変更中の throttle: 目標レーンの余裕のみ（現行）vs 現在→目標の最小の余裕（5レーン+補償、m=0.1、near=0.3）】');
+for (const [name, seeds] of [['シード 1〜20', SEEDS], ['シード 21〜60', HOLDOUT]] as const) {
+  ruleRate = evaluate(makePolicy('rule-raw'), L, seeds).rate;
+  console.log(`\n${name}`);
+  console.log(header);
+  const c5 = cfg(LANES5, 0.1, 0.3, true);
+  console.log(line('現行（目標レーンの余裕のみ）', evaluate(lanePolicy(c5), L, seeds)));
+  console.log(line('変種（現在→目標の最小の余裕）', evaluate(pathPolicy(c5), L, seeds)));
 }
