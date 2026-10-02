@@ -1,7 +1,7 @@
 import { experimental_evaluate as evaluate } from 'ai';
 import type { JevDetail, Observation, Plan, Steer } from '../lib/types';
 import { MARGIN, nearestLaneIdx, observationClearances, THROTTLE_NEAR } from '../vision/lane-plan';
-import { LANES5 } from '../vision/lanes';
+import { LANES3 } from '../vision/lanes';
 import { buildJevDetail } from './jev-detail';
 import { buildJevQuestion, LANE_NAMES } from './jev-question';
 
@@ -57,7 +57,7 @@ export async function decide(
       return null;
     }
     return {
-      plan: { targetX: LANES5.centers[laneIdx], throttle },
+      plan: { targetX: LANES3.centers[laneIdx], throttle },
       detail: buildJevDetail(
         r.answers.lane.choice, r.answers.throttle.choice,
         r.answers.lane.probabilities, r.answers.throttle.probabilities,

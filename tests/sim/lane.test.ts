@@ -22,7 +22,7 @@ describe('selectLane', () => {
     expect(selectLane(obs2, 'center')).toBe('center');
   });
   it('差が 0.1 以上なら最大のレーンへ移る', () => {
-    const obs = [{ x: -0.1, z: 0.3 }, { x: 0.6, z: 0.9 }];
+    const obs = [{ x: 0, z: 0.3 }, { x: -2 / 3, z: 0.4 }, { x: 2 / 3, z: 0.9 }];
     expect(selectLane(obs, 'center')).toBe('right');
   });
   it('通過済み（z が負）の障害物は無視する', () => {

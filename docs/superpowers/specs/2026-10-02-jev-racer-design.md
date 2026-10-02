@@ -42,7 +42,7 @@ Next.js（App Router、TypeScript）。Vercel へそのままデプロイでき�
 | `vision` | `detect(imageData) -> Detections`。YOLO11n（onnxruntime-web）で物体検出し、画素走査でコース端を取る | onnxruntime-web |
 | `observation` | Detections を Jev 向けの `Observation` JSON に変換する純関数 | なし |
 | `driver` | 約150ms周期（処理中は重ねない）で observation を送り、Jev の Plan（目標レーン・throttle）を受け取って保持する。タイムアウトと失敗時の保持を担う | racer, vision |
-| `/api/systemone` | Observation を受け、5レーンの余裕を計算して Jev に問い合わせ、Plan を返す。API キーはここだけが持つ | AI Gateway |
+| `/api/systemone` | Observation を受け、3車線の余裕を計算して Jev に問い合わせ、Plan を返す。API キーはここだけが持つ | AI Gateway |
 
 `vision` は `detect()` というインターフェースの裏に隠し、検出器を差し替え可能にする。色ブロブ検出は作らない（テストの正解はゲーム内部の座標から計算でき、予備は「直前の操作を維持」で足りるため）。
 
@@ -57,12 +57,12 @@ type Observation = {
                x: number; y: number; w: number; h: number }[]; // 画面比 0..1
 };
 type Action = { steer: -1 | 0 | 1; throttle: -1 | 0 | 1 };           // ゲーム（racer）が受け取る操作
-type Plan = { targetX: number; throttle: -1 | 0 | 1 };               // Jev の判断。targetX は 5 レーンの中心（-0.8/-0.4/0/0.4/0.8）
+type Plan = { targetX: number; throttle: -1 | 0 | 1 };               // Jev の判断。targetX は 3 車線の中心（-2/3, 0, 2/3）。車は常に車線内に収まる
 type SystemOneResponse = { plan: Plan | null; latencyMs: number; source: 'jev' | 'hold' }; // Jev が失敗したら plan は null
 // クライアントが送る観測 Observation には、現在の目標レーン targetX（省略可）を含める。
 
 // 【2026-10-02 変更】Jev は「左・直進・右」の生の操作ではなく、目標レーンと加減速を選ぶ（Plan）。
-// サーバーが観測から 5 レーンの余裕（clearance、遅延補償つき）を計算して Jev に渡し、Jev は目標レーン（5択）と throttle（3択）を選ぶ。
+// サーバーが観測から 3 車線の余裕（clearance、遅延補償つき）を計算して Jev に渡し、Jev は目標レーン（3択）と throttle（3択）を選ぶ。
 // ゲーム側の低レベル制御が、毎フレーム、目標レーンへ操舵する（steer = laneSteer(playerX, targetX)）。
 // 理由: 判断の更新が約0.5秒に1回で、切りっぱなしだと衝突が多い。模擬実験で距離あたり衝突が約40%減（1.016→0.605）、
 // 実 Jev・ブラウザ65秒でも 0.92→0.608（操作なしは約1.19）。

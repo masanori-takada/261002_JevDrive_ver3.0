@@ -1,5 +1,6 @@
 import type { Box } from '../lib/types';
 import type { GameState } from './racer';
+import { LANE_HALF } from './lane-geometry';
 import { dashStarts, DASH_LEN } from './road-dash';
 import { ASPECT, baseY, HORIZON, obstacleBox, screenX, T_BOTTOM } from './projection';
 
@@ -62,7 +63,7 @@ export function renderGame(ctx: CanvasRenderingContext2D, s: GameState, o: Rende
   // レーン破線（走行距離に応じて手前へ流れる）
   // 破線は世界の奥行き z に置き、障害物と同じ投影（t = 1 − z、線形）で描く
   const zMin = 1 - T_BOTTOM;
-  for (const u of [-1 / 3, 1 / 3]) {
+  for (const u of [-LANE_HALF, LANE_HALF]) {
     for (const z of dashStarts(s.distance)) {
       const zNear = Math.max(z, zMin);
       const zFar = Math.min(z + DASH_LEN, 1);

@@ -3,7 +3,7 @@ import { nearestLaneIdx, planFromObservation } from '../vision/lane-plan';
 import { buildJevDetail } from './jev-detail';
 import { LANE_NAMES, THROTTLE_NAMES } from './jev-question';
 
-/** JEV_MOCK=1 のときだけ使う、Jev の代わりのルール式。5 レーンの余裕から実機と同じ構造の Plan を返す（結合テスト用） */
+/** JEV_MOCK=1 のときだけ使う、Jev の代わりのルール式。3 レーンの余裕から実機と同じ構造の Plan を返す（結合テスト用） */
 export function rulePlan(obs: Observation): Plan {
   return planFromObservation(obs);
 }

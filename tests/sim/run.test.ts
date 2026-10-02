@@ -94,4 +94,24 @@ describe('runEpisode', () => {
     runEpisode(policy, 1, 100 / 60, 0.45);
     expect(decided).toEqual([0, 27, 54, 81]);
   });
+  it('衝突の瞬間の「最寄りの車線の中心からのずれ」と、またいでいる時間の割合を返す', () => {
+    const full: Policy<{ steer: 0; throttle: 1 }> = {
+      initial: { steer: 0, throttle: 1 },
+      decide: () => ({ steer: 0, throttle: 1 }),
+      toAction: (d) => d,
+    };
+    const r = runEpisode(full, 1, 60, 0.55, 0.5);
+    expect(r.crashOffsets).toHaveLength(r.crashes);
+    expect(r.crashes).toBeGreaterThan(0);
+    for (const d of r.crashOffsets) {
+      expect(d).toBeGreaterThanOrEqual(0);
+      expect(d).toBeLessThanOrEqual(1 / 3 + 1e-9 + 1);
+    }
+    expect(r.straddleRatio).toBeGreaterThanOrEqual(0);
+    expect(r.straddleRatio).toBeLessThanOrEqual(1);
+  });
+  it('直進するだけなら、車線の中心を走り続けるので、またいでいる時間は 0', () => {
+    const r = runEpisode(makePolicy('noop'), 1, 10, 0.55);
+    expect(r.straddleRatio).toBe(0);
+  });
 });

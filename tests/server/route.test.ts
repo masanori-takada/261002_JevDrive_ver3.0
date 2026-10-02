@@ -40,7 +40,7 @@ describe('POST /api/systemone', () => {
     expect(json.plan).toEqual({ targetX: 0.4, throttle: 1 });
     expect(json.source).toBe('jev');
     expect(typeof json.latencyMs).toBe('number');
-    expect(json.detail.lane).toHaveLength(5);
+    expect(json.detail.lane).toHaveLength(3);
     expect(json.detail.throttle).toHaveLength(3);
   });
 
@@ -121,9 +121,9 @@ describe('POST /api/systemone', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.plan).not.toBeNull();
-    expect([-0.8, -0.4, 0, 0.4, 0.8]).toContain(json.plan.targetX);
+    expect([-2 / 3, 0, 2 / 3]).toContain(json.plan.targetX);
     // 選ばれたものが 1、他が 0 の detail を同じ形で返す
-    expect(json.detail.lane).toHaveLength(5);
+    expect(json.detail.lane).toHaveLength(3);
     expect(json.detail.throttle).toHaveLength(3);
     expect(json.detail.lane.filter((l: { prob: number }) => l.prob === 1)).toHaveLength(1);
     expect(json.detail.lane.find((l: { prob: number }) => l.prob === 1).name).toBe(json.detail.laneChoice);

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { LANE_CENTERS } from '../../src/game/lane-geometry';
 import { makeScene } from '../../src/game/scene';
 
 describe('makeScene', () => {
-  it('決定的で、障害物は1〜3個、z は 0.25〜0.95、x は -0.8〜0.8', () => {
+  it('決定的で、障害物は1〜3個、z は 0.25〜0.95、x は車線の中心、自車も車線の中心', () => {
     for (let i = 0; i < 100; i++) {
       const s = makeScene(i);
       expect(JSON.stringify(s)).toBe(JSON.stringify(makeScene(i)));
@@ -11,9 +12,9 @@ describe('makeScene', () => {
       for (const o of s.obstacles) {
         expect(o.z).toBeGreaterThanOrEqual(0.25);
         expect(o.z).toBeLessThanOrEqual(0.95);
-        expect(Math.abs(o.x)).toBeLessThanOrEqual(0.8);
+        expect(LANE_CENTERS).toContain(o.x);
       }
-      expect(Math.abs(s.playerX)).toBeLessThanOrEqual(0.8);
+      expect(LANE_CENTERS).toContain(s.playerX);
     }
   });
   it('障害物同士の z は 0.2 以上離れている', () => {

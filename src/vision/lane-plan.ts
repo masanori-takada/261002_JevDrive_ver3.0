@@ -1,7 +1,7 @@
-// 観測（検出ボックス）から 5 レーンの余裕を求め、目標レーンと throttle を決める（製品とシミュレーションで共用）
+// 観測（検出ボックス）から 3 レーンの余裕を求め、目標レーンと throttle を決める（製品とシミュレーションで共用）
 import { closingAdvance } from '../game/racer';
 import type { Observation, Plan, Steer } from '../lib/types';
-import { clearancesFor, LANES5 } from './lanes';
+import { clearancesFor, LANES3 } from './lanes';
 
 /** 実 Jev の判断の更新周期（秒）。遅延補償に使う */
 export const LATENCY_S = 0.55;
@@ -32,18 +32,18 @@ export function decideFromClearances(
   return { idx, throttle };
 }
 
-/** x に最も近い 5 レーンの番号（同距離なら小さい番号） */
+/** x に最も近い 3 レーンの番号（同距離なら小さい番号） */
 export function nearestLaneIdx(x: number): number {
   let best = 0;
-  LANES5.centers.forEach((c, i) => {
-    if (Math.abs(c - x) < Math.abs(LANES5.centers[best] - x)) best = i;
+  LANES3.centers.forEach((c, i) => {
+    if (Math.abs(c - x) < Math.abs(LANES3.centers[best] - x)) best = i;
   });
   return best;
 }
 
-/** 5 レーンの余裕。判断が反映される L 秒後の位置に進めて評価する（遅延補償） */
+/** 3 レーンの余裕。判断が反映される L 秒後の位置に進めて評価する（遅延補償） */
 export function observationClearances(obs: Observation): number[] {
-  return clearancesFor(obs, LANES5, closingAdvance(obs.speed, LATENCY_S));
+  return clearancesFor(obs, LANES3, closingAdvance(obs.speed, LATENCY_S));
 }
 
 /** 観測だけから Plan を決める（モックのルール式）。targetX が無ければ中央を現在のレーンとする */
@@ -51,5 +51,5 @@ export function planFromObservation(obs: Observation): Plan {
   const cl = observationClearances(obs);
   const current = nearestLaneIdx(obs.targetX ?? 0);
   const d = decideFromClearances(cl, current, obs.speed, { margin: MARGIN, throttleNear: THROTTLE_NEAR });
-  return { targetX: LANES5.centers[d.idx], throttle: d.throttle };
+  return { targetX: LANES3.centers[d.idx], throttle: d.throttle };
 }

@@ -7,7 +7,8 @@ import { makePolicy, type Policy } from '../src/sim/policies';
 import { runEpisode } from '../src/sim/run';
 import { BEST_CONFIG } from '../src/sim/config';
 import { THROTTLE_NEAR } from '../src/vision/lane-plan';
-import { LANES3, LANES5, type LaneSpec } from '../src/vision/lanes';
+import { LANE_HALF } from '../src/game/lane-geometry';
+import { LANES3, type LaneSpec } from '../src/vision/lanes';
 
 const SEEDS = Array.from({ length: 20 }, (_, i) => i + 1);
 const HOLDOUT = Array.from({ length: 40 }, (_, i) => i + 21);
@@ -39,7 +40,7 @@ const cfg = (spec: LaneSpec, margin: number, throttleNear: number, comp: boolean
 });
 const lanePolicy = (c: LaneConfig) => makeLanePolicy(c);
 
-// 障害物の出現間隔の比較（製品方式 = 5レーン+遅延補償、noop、oracle）。
+// 障害物の出現間隔の比較（製品方式 = 3レーン+遅延補償、noop、oracle）。
 // `npm run sim -- --spawn-only` でこの比較だけを実行して終了する
 const SPAWN_GAPS = [0.5, 0.8, 1.2, 1.6, 2.0, 2.4, 2.5];
 /** 採用基準: 製品方式の距離あたり衝突回数がこれ以下になる最小の間隔 */
@@ -51,7 +52,7 @@ function spawnTable() {
   const seeds = SEEDS;
   const policies: { label: string; policy: Policy<any>; lat: number }[] = [
     { label: 'noop', policy: makePolicy('noop'), lat: L },
-    { label: '製品（5レーン+補償）', policy: lanePolicy(BEST_CONFIG), lat: L },
+    { label: '製品（3レーン+補償）', policy: lanePolicy(BEST_CONFIG), lat: L },
     { label: 'oracle（L=0）', policy: makePolicy('oracle'), lat: 0 },
   ];
   console.log(`\n【障害物の出現間隔の比較（シード 1〜${seeds.length} 各 ${SECONDS} 秒、製品は L=${L}）】`);
@@ -118,7 +119,6 @@ console.log(line('lane-obs 3レーン 3桁丸め', evaluate(lanePolicy(base3), L
 console.log('\n【改善を 1 つずつ（土台: lane-obs 3レーン 3桁丸め）】');
 console.log(header);
 console.log(line('a. 遅延補償', evaluate(lanePolicy(cfg(LANES3, 0.1, 0.3, true)), L)));
-console.log(line('b. 5レーン', evaluate(lanePolicy(cfg(LANES5, 0.1, 0.3, false)), L)));
 
 // c) 閾値のグリッド
 const MARGINS = [0.05, 0.1, 0.2, 0.3];
@@ -146,7 +146,7 @@ console.log(line(`c. 最良 (m=${b3.margin}, near=${b3.near})`, b3.r));
 console.log('\n【d. 組み合わせ（各組で閾値グリッドの最良）】');
 console.log(header);
 const finals: { label: string; c: LaneConfig; r: Row }[] = [];
-for (const [name, spec] of [['3レーン', LANES3], ['5レーン', LANES5]] as const) {
+for (const [name, spec] of [['3レーン', LANES3]] as const) {
   for (const comp of [false, true]) {
     const b = best(grid(spec, comp));
     const c = cfg(spec, b.margin, b.near, comp);
@@ -155,7 +155,7 @@ for (const [name, spec] of [['3レーン', LANES3], ['5レーン', LANES5]] as c
     console.log(line(label, b.r));
   }
 }
-console.log(line('(参考) 5レーン+補償 (m=0.1, near=0.3)', evaluate(lanePolicy(cfg(LANES5, 0.1, 0.3, true)), L)));
+console.log(line('(参考) 3レーン+補償 (m=0.1, near=0.3)', evaluate(lanePolicy(cfg(LANES3, 0.1, 0.3, true)), L)));
 const bestFinal = finals.reduce((a, b) => (b.r.rate < a.r.rate ? b : a));
 console.log(`\n最良: ${bestFinal.label}`);
 
@@ -168,15 +168,15 @@ console.log(line('oracle（L=0）', evaluate(makePolicy('oracle'), 0, HOLDOUT)))
 console.log(line('lane-target（世界座標・比較用）', evaluate(makePolicy('lane-target'), L, HOLDOUT)));
 for (const f of finals) console.log(line(f.label, evaluate(lanePolicy(f.c), L, HOLDOUT)));
 
-// 5 レーンの幅（halfWidth）の比較（遅延補償あり、閾値は製品の既定値）
-console.log('\n【5レーンの幅 halfWidth の比較（遅延補償あり、m=0.1、near=0.3）】');
+// 3 レーンの幅（halfWidth）の比較（遅延補償あり、閾値は製品の既定値）
+console.log('\n【3レーンの幅 halfWidth の比較（遅延補償あり、m=0.1、near=0.3）】');
 for (const [name, seeds] of [['シード 1〜20', SEEDS], ['シード 21〜60', HOLDOUT]] as const) {
   ruleRate = evaluate(makePolicy('rule-raw'), L, seeds).rate;
   console.log(`\n${name}`);
   console.log(header);
-  for (const w of [0.4, 0.5, HIT_DX]) {
-    const spec: LaneSpec = { ...LANES5, halfWidth: w };
-    console.log(line(`5レーン+補償 halfWidth=${w}`, evaluate(lanePolicy(cfg(spec, 0.1, 0.3, true)), L, seeds)));
+  for (const w of [0.25, LANE_HALF, HIT_DX]) {
+    const spec: LaneSpec = { ...LANES3, halfWidth: w };
+    console.log(line(`3レーン+補償 halfWidth=${w}`, evaluate(lanePolicy(cfg(spec, 0.1, 0.3, true)), L, seeds)));
   }
 }
 
@@ -195,19 +195,19 @@ function pathPolicy(c: LaneConfig): Policy<ObsLaneDecision> {
     toAction: (d, s) => ({ steer: laneSteer(s.playerX, c.spec.centers[d.idx]), throttle: d.throttle }),
   };
 }
-console.log('\n【レーン変更中の throttle: 目標レーンの余裕のみ（現行）vs 現在→目標の最小の余裕（5レーン+補償、m=0.1、near=0.3）】');
+console.log('\n【レーン変更中の throttle: 目標レーンの余裕のみ（現行）vs 現在→目標の最小の余裕（3レーン+補償、m=0.1、near=0.3）】');
 for (const [name, seeds] of [['シード 1〜20', SEEDS], ['シード 21〜60', HOLDOUT]] as const) {
   ruleRate = evaluate(makePolicy('rule-raw'), L, seeds).rate;
   console.log(`\n${name}`);
   console.log(header);
-  const c5 = cfg(LANES5, 0.1, 0.3, true);
+  const c5 = cfg(LANES3, 0.1, 0.3, true);
   console.log(line('現行（目標レーンの余裕のみ）', evaluate(lanePolicy(c5), L, seeds)));
   console.log(line('変種（現在→目標の最小の余裕）', evaluate(pathPolicy(c5), L, seeds)));
 }
 
 spawnTable();
 
-// 判断の「周期 period」と「遅延 L」を分けた比較（製品方式: 5レーン+遅延補償。補償の L は実際の遅延 L に合わせる）。
+// 判断の「周期 period」と「遅延 L」を分けた比較（製品方式: 3レーン+遅延補償。補償の L は実際の遅延 L に合わせる）。
 // 旧方式は応答を待ってから次を送る（period = L）。新方式は重ねて送る（period 0.15）
 type PRow = { crashes: number; distance: number; rate: number; perCrash: number; visible: number };
 function evaluateP<D>(policy: Policy<D>, lat: number, period: number, seeds: number[]): PRow {
@@ -227,9 +227,9 @@ const pline = (label: string, r: PRow) =>
   `${pad(Number.isFinite(r.perCrash) ? r.perCrash.toFixed(1) : '∞', 11)}${pad(`${(r.visible * 100).toFixed(1)}%`, 10)}`;
 const pheader = `${'方式'.padEnd(36, ' ')}${pad('衝突', 8)}${pad('距離', 10)}${pad('衝突/距離', 11)}${pad('距離/衝突', 11)}${pad('車が見える', 10)}`;
 const prodPolicy = (compL: number, margin: number) =>
-  lanePolicy({ spec: LANES5, margin, throttleNear: THROTTLE_NEAR, compensateL: compL, round: true });
+  lanePolicy({ spec: LANES3, margin, throttleNear: THROTTLE_NEAR, compensateL: compL, round: true });
 
-console.log('\n【判断の周期 period と遅延 L の比較（5レーン+補償、m=0.1。補償の L は遅延 L と同じ。120 秒、V_CAR と出現間隔は既定値）】');
+console.log('\n【判断の周期 period と遅延 L の比較（3レーン+補償、m=0.1。補償の L は遅延 L と同じ。120 秒、V_CAR と出現間隔は既定値）】');
 const PERIOD = 0.15;
 const LS = [0.35, 0.45, 0.55];
 const bestL = { value: LS[0], rate: Infinity };
@@ -264,4 +264,30 @@ for (const [name, seeds] of [['シード 1〜20', SEEDS], ['シード 21〜60', 
       console.log(pline(`実遅延 ${real} / 補償 ${comp}`, evaluateP(prodPolicy(comp, 0.1), real, PERIOD, seeds)));
     }
   }
+}
+
+// 衝突時の車線からのずれ（製品方式、period=0.15、L=0.55、出現間隔・V_CAR は既定値）。
+// 「ずれ」は衝突の瞬間の |playerX − 最寄りの車線の中心|。0.1 を超えていたら線をまたいでいたとみなす
+console.log('\n【衝突時の車線からのずれ（period=0.15, L=0.55）】');
+console.log('変更前（5 段階の目標、シード 1〜20、実測値）: 衝突 64、衝突/距離 0.028、またいでいた割合 51.6%、ずれの中央値 0.303、またいでいる時間 47.1%');
+console.log(`${'区分'.padEnd(20, ' ')}${pad('衝突', 6)}${pad('衝突/距離', 11)}${pad('またいでいた割合', 16)}${pad('ずれ中央値', 12)}${pad('またぐ時間', 12)}`);
+for (const [name, seeds] of [['3車線 シード 1〜20', SEEDS], ['3車線 シード 21〜60', HOLDOUT]] as const) {
+  const offs: number[] = [];
+  let crashes = 0;
+  let distance = 0;
+  let straddle = 0;
+  for (const seed of seeds) {
+    const r = runEpisode(prodPolicy(0.55, 0.1), seed, SECONDS, 0.55, undefined, 0.15);
+    crashes += r.crashes;
+    distance += r.distance;
+    straddle += r.straddleRatio;
+    offs.push(...r.crashOffsets);
+  }
+  offs.sort((a, b) => a - b);
+  const over = offs.length ? offs.filter((x) => x > 0.1).length / offs.length : 0;
+  const med = offs.length ? offs[Math.floor(offs.length / 2)] : 0;
+  console.log(
+    `${name.padEnd(20, ' ')}${pad(String(crashes), 6)}${pad((crashes / distance).toFixed(3), 11)}${pad(`${(over * 100).toFixed(1)}%`, 16)}` +
+      `${pad(med.toFixed(3), 12)}${pad(`${((straddle / seeds.length) * 100).toFixed(1)}%`, 12)}`,
+  );
 }

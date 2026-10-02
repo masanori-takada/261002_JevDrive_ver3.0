@@ -1,11 +1,11 @@
 // 実 Jev への質問（目標レーン・throttle）の組み立て。実 Jev で 98% 一致した文面をそのまま使う
+import { LANE_CENTERS } from '../game/lane-geometry';
 
-export const LANE_NAMES = ['far_left', 'left', 'center', 'right', 'far_right'] as const;
+export const LANE_NAMES = ['left', 'center', 'right'] as const;
 /** 画面表示用のラベル（LANE_NAMES と同じ順） */
-export const LANE_LABELS = ['最左', '左', '中央', '右', '最右'] as const;
+export const LANE_LABELS = ['左', '中央', '右'] as const;
 export const THROTTLE_NAMES = ['brake', 'hold', 'accelerate'] as const;
 export const THROTTLE_LABELS = ['減速', '維持', '加速'] as const;
-const LANE_CENTERS = [-0.8, -0.4, 0, 0.4, 0.8];
 
 export type JevQuestion = {
   state: Record<string, unknown>;
@@ -22,12 +22,12 @@ export function buildJevQuestion(
   const laneCriteria: Record<string, string> = {};
   LANE_NAMES.forEach((n, i) => {
     clearance[n] = round3(cl[i]);
-    laneCriteria[n] = `${n} レーン（道路上の位置 ${LANE_CENTERS[i]}）を目標にする`;
+    laneCriteria[n] = `${n} レーン（道路上の位置 ${round3(LANE_CENTERS[i])}）を目標にする`;
   });
   return {
     state: {
       説明:
-        'レーシングゲームの 5 レーン。左から far_left, left, center, right, far_right。' +
+        'レーシングゲームの 3 レーン。左から left, center, right。' +
         '各レーンの余裕は、そのレーン上で最も近い障害物までの距離（0..1）。小さいほど危険、1 は障害物なし。',
       現在のレーン: LANE_NAMES[current],
       速度: round3(speed),

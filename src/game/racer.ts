@@ -1,4 +1,5 @@
 import type { Action } from '../lib/types';
+import { LANE_CENTERS, PLAYER_X_MAX } from './lane-geometry';
 
 export type Obstacle = { id: number; x: number; z: number };
 export type GameState = {
@@ -30,7 +31,6 @@ export function closingAdvance(speed: number, latencyS: number): number {
 }
 const CRASH_FRAMES = 45;
 const RECOVER_SPEED = 0.3;
-const OFFROAD_SPEED = 0.3;
 const HIT_Z = 0.1;
 export const HIT_DX = 0.55;
 
@@ -61,8 +61,7 @@ export function step(s: GameState, a: Action): GameState {
   if (crashed && frame >= s.crashedUntil) speed = RECOVER_SPEED;
   const playerX = crashed
     ? s.playerX
-    : clamp(s.playerX + a.steer * STEER_RATE * DT * (0.4 + 0.6 * speed), -1.3, 1.3);
-  if (Math.abs(playerX) > 1) speed = Math.min(speed, OFFROAD_SPEED);
+    : clamp(s.playerX + a.steer * STEER_RATE * DT * (0.4 + 0.6 * speed), -PLAYER_X_MAX, PLAYER_X_MAX);
 
   const distance = s.distance + speed * DT;
   let obstacles = s.obstacles
@@ -74,7 +73,8 @@ export function step(s: GameState, a: Action): GameState {
   if (distance - lastSpawn >= s.spawnGap) {
     const r = nextRandom(seed);
     seed = r.seed;
-    obstacles.push({ id: nextId++, x: (r.value * 2 - 1) * 0.8, z: 1 });
+    // 出現位置は 3 つの車線の中心のどれか
+    obstacles.push({ id: nextId++, x: LANE_CENTERS[Math.min(LANE_CENTERS.length - 1, Math.floor(r.value * LANE_CENTERS.length))], z: 1 });
     lastSpawn = distance;
   }
 

@@ -19,7 +19,7 @@ const zero = (labels: string[]): DetailRowView[] =>
 
 /** 運転していない間（detail なし）の表示。全て 0% */
 export const EMPTY_ROWS: DetailRowsView = {
-  lane: zero(['最左', '左', '中央', '右', '最右']),
+  lane: zero(['左', '中央', '右']),
   throttle: zero(['減速', '維持', '加速']),
 };
 

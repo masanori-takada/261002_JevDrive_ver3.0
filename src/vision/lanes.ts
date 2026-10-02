@@ -1,13 +1,12 @@
 // 検出ボックスだけから、車線ごとの余裕（clearance）を求める純関数。
 // src/game/projection.ts の投影の逆: 接地位置 y+h = baseY(t) から t、中心 cx = 0.5 + (u - playerX)*roadHalf(t) から u を求める。
 import { BASE_NEAR, HORIZON, roadHalf } from '../game/projection';
-import { HIT_DX } from '../game/racer';
+import { LANE_CENTERS, LANE_HALF } from '../game/lane-geometry';
 import type { Observation } from '../lib/types';
 
 export type LaneSpec = { centers: number[]; halfWidth: number };
-// レーン幅はゲームの衝突判定幅（HIT_DX）に合わせる。狭いとレーン端の障害物を「余裕あり」と誤判定する
-export const LANES3: LaneSpec = { centers: [-0.55, 0, 0.55], halfWidth: HIT_DX };
-export const LANES5: LaneSpec = { centers: [-0.8, -0.4, 0, 0.4, 0.8], halfWidth: HIT_DX };
+/** 3 車線（中心と半幅は game/lane-geometry の定義。障害物は車線の中心にだけ出る） */
+export const LANES3: LaneSpec = { centers: [...LANE_CENTERS], halfWidth: LANE_HALF };
 
 const PASSED_Z = -0.02; // これ以下の z は通過済みで無視（ゲームの衝突判定は z > -0.02）
 const T_MAX = 1.1;      // これを超える t は異常値として無視

@@ -5,7 +5,8 @@ import { Driver, type DriverStatus } from '../driver/driver';
 import { INITIAL_MODEL_LOAD, modelLoadLabel, modelLoadReducer } from '../driver/model-load';
 import { postObservation } from '../driver/post';
 import { warmUpJev } from '../driver/warm-up';
-import { manualAction } from '../game/keys';
+import { laneKeyDirection, manualAction, moveLane } from '../game/keys';
+import { LANE_CENTERS } from '../game/lane-geometry';
 import { baseY, screenX } from '../game/projection';
 import { createGame, DT, step, type GameState } from '../game/racer';
 import { renderGame } from '../game/render';
@@ -13,7 +14,7 @@ import { isRunning, nextStarted } from '../game/run-state';
 import { laneSteer } from '../game/steer';
 import type { Detection, JevDetail, Plan } from '../lib/types';
 import { nearestLaneIdx } from '../vision/lane-plan';
-import { LANES5 } from '../vision/lanes';
+import { LANES3 } from '../vision/lanes';
 import { createVision } from '../vision/pipeline';
 
 const W = 640;
@@ -64,6 +65,8 @@ export function RacerGame() {
   const keysRef = useRef(new Set<string>());
   const jevPlanRef = useRef<Plan>({ targetX: 0, throttle: 0 });
   const jevRunningRef = useRef(false);
+  /** 手動操作の目標の車線（0=左, 1=中央, 2=右）。←→で 1 車線ずつ動く */
+  const manualLaneRef = useRef(1);
   const detectionsRef = useRef<Detection[]>([]);
   const driverRef = useRef<Driver | null>(null);
   const mountedRef = useRef(true);
@@ -159,6 +162,8 @@ export function RacerGame() {
 
     const down = (e: KeyboardEvent) => {
       keysRef.current.add(e.key);
+      // 手動操作: ←→は押した瞬間に目標の車線を 1 つ動かす（自動リピートは無視）
+      if (!jevRunningRef.current) manualLaneRef.current = moveLane(manualLaneRef.current, laneKeyDirection(e.key, e.repeat));
       // 矢印キーの最初の押下で待機から発進する
       const next = nextStarted(startedRef.current, e.key);
       if (next !== startedRef.current) {
@@ -185,7 +190,7 @@ export function RacerGame() {
         // Jev 運転中は、目標レーンへ向かうハンドル操作を毎フレーム車側で計算する
         const action = jevRunningRef.current
           ? { steer: laneSteer(stateRef.current.playerX, jevPlanRef.current.targetX), throttle: jevPlanRef.current.throttle }
-          : manualAction(keysRef.current);
+          : { steer: laneSteer(stateRef.current.playerX, LANE_CENTERS[manualLaneRef.current]), throttle: manualAction(keysRef.current).throttle };
         stateRef.current = step(stateRef.current, action);
         acc -= DT;
         frames += 1;
@@ -265,7 +270,7 @@ export function RacerGame() {
       startedRef.current = true;
       setStarted(true);
       // 開始時の目標は、今いる位置に最も近いレーン
-      jevPlanRef.current = { targetX: LANES5.centers[nearestLaneIdx(stateRef.current.playerX)], throttle: 0 };
+      jevPlanRef.current = { targetX: LANES3.centers[nearestLaneIdx(stateRef.current.playerX)], throttle: 0 };
       const driver = new Driver({
         analyze: async () => {
           const r = await vision.analyze(captureFrame());
@@ -288,8 +293,10 @@ export function RacerGame() {
           if (!s.running) {
             detectionsRef.current = [];
             setDetail(null);
+            // 手動操作に戻るときは、今いる車線を目標にする
+            manualLaneRef.current = nearestLaneIdx(stateRef.current.playerX);
             // 停止時は目標を現在位置に最も近いレーンへ戻す
-            jevPlanRef.current = { targetX: LANES5.centers[nearestLaneIdx(stateRef.current.playerX)], throttle: 0 };
+            jevPlanRef.current = { targetX: LANES3.centers[nearestLaneIdx(stateRef.current.playerX)], throttle: 0 };
           }
           setStatus(s);
         },

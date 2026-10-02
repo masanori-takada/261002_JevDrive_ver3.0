@@ -1,10 +1,11 @@
 // 世界座標（x, z）で判断する 3 レーン方式のロジック（シミュレーションの比較用。製品では使わない）
+import { LANE_CENTERS } from '../game/lane-geometry';
 import type { Steer } from '../lib/types';
 
 export type Lane = 'left' | 'center' | 'right';
 export type SimObstacle = { x: number; z: number };
 
-export const LANE_X: Record<Lane, number> = { left: -0.55, center: 0, right: 0.55 };
+export const LANE_X: Record<Lane, number> = { left: LANE_CENTERS[0], center: LANE_CENTERS[1], right: LANE_CENTERS[2] };
 const LANE_ORDER: Lane[] = ['center', 'left', 'right'];
 
 const LANE_HALF_WIDTH = 0.55; // |x - レーン| がこれ未満なら、そのレーン上の障害物とみなす

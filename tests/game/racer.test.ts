@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { LANE_CENTERS, PLAYER_X_MAX } from '../../src/game/lane-geometry';
 import { closingAdvance, createGame, DEFAULT_SPAWN_GAP, step, V_CAR, Z_RATE } from '../../src/game/racer';
 
 const idle = { steer: 0, throttle: 0 } as const;
@@ -51,9 +52,24 @@ describe('racer', () => {
     expect(s.obstacles).toHaveLength(1);
   });
 
-  it('路外（|playerX|>1）では速度が 0.3 以下に制限される', () => {
-    const s = step({ ...createGame(1), playerX: 1.2, speed: 1 }, idle);
-    expect(s.speed).toBeLessThanOrEqual(0.3);
+  it('自車の横位置は [-2/3, 2/3]（車線の中心の外側へは行けない）', () => {
+    let s = createGame(1);
+    for (let i = 0; i < 300; i++) s = { ...step(s, { steer: 1, throttle: 0 }), obstacles: [] };
+    expect(s.playerX).toBeCloseTo(PLAYER_X_MAX, 9);
+    for (let i = 0; i < 600; i++) s = { ...step(s, { steer: -1, throttle: 0 }), obstacles: [] };
+    expect(s.playerX).toBeCloseTo(-PLAYER_X_MAX, 9);
+  });
+
+  it('障害物の出現位置は常に 3 つの車線の中心のどれか（複数のシードで確認）', () => {
+    for (const seed of [1, 2, 3, 7, 11]) {
+      let s = createGame(seed, 0.5);
+      const seen = new Set<number>();
+      for (let i = 0; i < 2000; i++) {
+        s = step({ ...s, speed: 1, crashedUntil: 0 }, idle);
+        for (const o of s.obstacles) seen.add(o.x);
+      }
+      expect([...seen].sort((a, b) => a - b)).toEqual([...LANE_CENTERS]); // 3 車線すべてに出現する
+    }
   });
 
   it('衝突中は操作を無視し、終了時に速度 0.3 で復帰する', () => {
