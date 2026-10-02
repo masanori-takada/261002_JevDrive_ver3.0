@@ -70,12 +70,12 @@ type SystemOneResponse = { action: Action | null; latencyMs: number; source: 'je
 
 ## 6. Jev 連携の注意
 
-- Jev の入出力形式は未確認。サブタスク6の最初に実機で確認する（最小の1リクエスト）。構造化出力が使えない場合は、JSON を指示して文字列から解析する。
-- 解析に失敗した応答は `hold` として扱い、直前の Action を維持する。
+- Jev（`typesafe-ai/jev`）は言語モデルではなく評価モデル。AI SDK 7 の `experimental_evaluate` で、共有状態（観測 JSON）と型付き質問（steer と throttle の choice）を渡し、選択肢を得る（2026-10-02 に実機確認）。
+- 応答が失敗・タイムアウト・想定外の選択肢だった場合は `hold` として扱い、直前の Action を維持する。
 
 ## 7. エラー処理
 
-- Jev が 400ms 以内に返さない、またはエラーを返した場合は直前の Action を維持する（`source: 'hold'`）。
+- Jev が 1000ms 以内に返さない、またはエラーを返した場合は直前の Action を維持する（`source: 'hold'`）。実測の応答時間は初回 500〜800ms、ウォームアップ後 335〜390ms のため、当初の 400ms から延長した（Jev の回答は A=延長で確率 0.51 と採用基準 0.8 未満だったが、A と C は両立し、実測でも質問数を減らして改善しなかったため A を採用。docs/decisions/jev-log.md）。
 - 連続5回失敗した場合は、画面に「Jev 応答なし」を出し、自動で停止する。
 - `AI_GATEWAY_API_KEY` 未設定ならサーバー起動時にエラーにする。
 - クレジット保護のため、Jev 操作は1回の連続稼働を最大3分で自動停止する。停止ボタンも常に出す。
@@ -115,5 +115,5 @@ type SystemOneResponse = { action: Action | null; latencyMs: number; source: 'je
 
 - ultralytics の重みは AGPL-3.0。個人利用なら問題ないが、一般公開する場合は YOLOX-Nano（Apache-2.0）へ切り替える。
 - COCO 学習済みモデルがゲームの絵を検出できない可能性（基準ゲートで検出し、微調整へ分岐）。
-- Jev の遅延と無料枠の制限（400ms 保持と3分停止で緩和）。
+- Jev の遅延と無料枠の制限（1000ms 保持と3分停止で緩和）。
 - 作業フォルダは git リポジトリではないため、仕様書はコミットしない。

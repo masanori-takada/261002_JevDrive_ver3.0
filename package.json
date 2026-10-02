@@ -2,7 +2,9 @@
   "name": "jevdrive",
   "private": true,
   "scripts": {
+    "predev": "node scripts/copy-ort.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/copy-ort.mjs",
     "build": "next build",
     "start": "next start",
     "test": "vitest run --passWithNoTests",

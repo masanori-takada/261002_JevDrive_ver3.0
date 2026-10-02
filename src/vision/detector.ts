@@ -29,7 +29,7 @@ async function create(): Promise<Detector> {
   const ort = window.ort;
   ort.env.wasm.wasmPaths = '/ort/';
   ort.env.wasm.numThreads = 1; // クロスオリジン分離なしで動かすため
-  const session = await ort.InferenceSession.create('/models/yolo11n.onnx', {
+  const session = await ort.InferenceSession.create('/models/yolo11n-jev.onnx', {
     executionProviders: ['wasm'],
   });
 
@@ -63,6 +63,10 @@ async function create(): Promise<Detector> {
 }
 
 export function getDetector(): Promise<Detector> {
-  detectorPromise ??= create();
+  detectorPromise ??= create().catch((e) => {
+    // 失敗したら破棄して、次回の呼び出しで再試行できるようにする
+    detectorPromise = null;
+    throw e;
+  });
   return detectorPromise;
 }
